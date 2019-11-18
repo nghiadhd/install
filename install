@@ -5,7 +5,7 @@
 HOMEBREW_PREFIX = "/usr/local".freeze
 HOMEBREW_REPOSITORY = "/usr/local/Homebrew".freeze
 HOMEBREW_CACHE = "#{ENV["HOME"]}/Library/Caches/Homebrew".freeze
-BREW_REPO = (ENV["BREW_REPO"] || "https://github.com/kobiton/brew").freeze
+BREW_REPO = (ENV["BREW_REPO"] || "https://github.com/nghiadhd/brew").freeze
 BREW_TAG = ENV["BREW_TAG"]
 
 # TODO: bump version when new macOS is released
