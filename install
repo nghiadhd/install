@@ -4,15 +4,14 @@
 # anywhere you like.
 HOMEBREW_PREFIX = "/usr/local".freeze
 HOMEBREW_REPOSITORY = "/usr/local/Homebrew".freeze
-HOMEBREW_CORE_TAP = "/usr/local/Homebrew/Library/Taps/homebrew/homebrew-core".freeze
 HOMEBREW_CACHE = "#{ENV["HOME"]}/Library/Caches/Homebrew".freeze
 BREW_REPO = (ENV["BREW_REPO"] || "https://github.com/kobiton/brew").freeze
 BREW_TAG = ENV["BREW_TAG"]
 
 # TODO: bump version when new macOS is released
-MACOS_LATEST_SUPPORTED = "10.14".freeze
+MACOS_LATEST_SUPPORTED = "10.15".freeze
 # TODO: bump version when new macOS is released
-MACOS_OLDEST_SUPPORTED = "10.12".freeze
+MACOS_OLDEST_SUPPORTED = "10.13".freeze
 
 # no analytics during installation
 ENV["HOMEBREW_NO_ANALYTICS_THIS_RUN"] = "1"
@@ -146,6 +145,9 @@ def chgrp?(path)
   !File.grpowned?(path)
 end
 
+# USER isn't always set so provide a fall back for the installer and subprocesses.
+ENV["USER"] ||= `id -un`.chomp
+
 # Invalidate sudo timestamp before exiting (if it wasn't active before).
 Kernel.system "/usr/bin/sudo -n -v 2>/dev/null"
 at_exit { Kernel.system "/usr/bin/sudo", "-k" } unless $CHILD_STATUS.success?
@@ -169,8 +171,6 @@ elsif macos_version < "10.9"
   abort "Your OS X version is too old"
 elsif Process.uid.zero?
   abort "Don't run this as root!"
-elsif !ENV["USER"]
-  abort "This script requires the USER environment variable to be set."
 elsif !`dsmemberutil checkmembership -U "#{ENV["USER"]}" -G admin`.include?("user is a member")
   abort "This script requires the user #{ENV["USER"]} to be an Administrator."
 elsif File.directory?(HOMEBREW_PREFIX) && (!File.executable? HOMEBREW_PREFIX)
@@ -196,10 +196,10 @@ elsif macos_version > MACOS_LATEST_SUPPORTED || macos_version < MACOS_OLDEST_SUP
 
   puts <<-EOS
 This installation may not succeed.
-After installation, you will encounter build failures and other breakages.
-Please create pull requests instead of asking for help on Homebrew's
-GitHub, Discourse, Twitter or IRC. As you are running this #{what},
-you are responsible for resolving any issues you experience.
+After installation, you will encounter build failures with some formulae.
+Please create pull requests instead of asking for help on Homebrew's GitHub,
+Discourse, Twitter or IRC. You are responsible for resolving any issues you
+experience while you are running this #{what}.
 
   EOS
 end
@@ -288,29 +288,19 @@ sudo "/bin/mkdir", "-p", HOMEBREW_CACHE unless File.directory? HOMEBREW_CACHE
 sudo "/bin/chmod", "g+rwx", HOMEBREW_CACHE if chmod? HOMEBREW_CACHE
 sudo "/usr/sbin/chown", ENV["USER"], HOMEBREW_CACHE if chown? HOMEBREW_CACHE
 sudo "/usr/bin/chgrp", "admin", HOMEBREW_CACHE if chgrp? HOMEBREW_CACHE
+system "/usr/bin/touch", "#{HOMEBREW_CACHE}/.cleaned" if File.directory? HOMEBREW_CACHE
 
-if should_install_command_line_tools?
+if should_install_command_line_tools? && macos_version >= "10.13"
   ohai "Searching online for the Command Line Tools"
   # This temporary file prompts the 'softwareupdate' utility to list the Command Line Tools
   clt_placeholder = "/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress"
   sudo "/usr/bin/touch", clt_placeholder
 
-  clt_macos_version = if macos_version == "10.9"
-    "Mavericks"
-  else
-    macos_version
-  end
-  clt_sort = if macos_version >= "10.13"
-    "sort -V"
-  else
-    "sort"
-  end
   clt_label_command = "/usr/sbin/softwareupdate -l | " \
-                      "grep -B 1 -E 'Command Line (Developer|Tools)' | " \
-                      "awk -F'*' '/^ +\\*/ {print $2}' | " \
-                      "grep '#{clt_macos_version}' | " \
-                      "#{clt_sort} | " \
-                      "sed 's/^ *//' | " \
+                      "grep -B 1 -E 'Command Line Tools' | " \
+                      "awk -F'*' '/^ *\\*/ {print $2}' | " \
+                      "sed -e 's/^ *Label: //' -e 's/^ *//' | " \
+                      "sort -V | " \
                       "tail -n1"
   clt_label = `#{clt_label_command}`.chomp
 
